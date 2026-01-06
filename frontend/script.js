@@ -8,7 +8,7 @@ async function verify() {
     }
 
     try {
-        const res = await fetch("http://127.0.0.1:8000/check-address", {
+        const res = await fetch("https://cryptoguard-ai-cloud.onrender.com/check-address", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
