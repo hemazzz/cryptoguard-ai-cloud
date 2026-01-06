@@ -2,11 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
-import os
 
 app = FastAPI()
 
-# CORS (frontend connect aagarthuku)
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,72 +13,47 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ----------- INPUT MODEL -----------
 class Address(BaseModel):
     address: str
 
-
-# ----------- HOME ROUTE -----------
 @app.get("/")
 def home():
     return {"msg": "CryptoGuard AI Backend Running"}
 
-
-# ----------- MAIN API -----------
 @app.post("/check-address")
-def check_address(data: Address):
+def check_address(payload: Address):
 
-    address = data.address.strip()
+    address = payload.address.strip()
 
-    # 🔑 BlockCypher API (free, no key also works)
-    url = f"https://api.blockcypher.com/v1/btc/main/addrs/{address}/full"
+    # 🔥 BLOCKCHAIN.INFO API (NO CACHE)
+    url = f"https://blockchain.info/rawaddr/{address}?limit=0"
 
     try:
         res = requests.get(url, timeout=10)
         if res.status_code != 200:
-            return {"valid": False, "error": "Invalid address or API error"}
+            return {"valid": False, "error": "Invalid address"}
 
         data = res.json()
-
     except Exception as e:
         return {"valid": False, "error": str(e)}
 
-    # -------- BASIC DATA --------
-    balance = data.get("balance", 0) / 1e8
-    total_tx = data.get("n_tx", 0)
+    # BASIC DATA
+    balance = data.get("final_balance", 0) / 1e8
     total_received = data.get("total_received", 0) / 1e8
+    total_tx = data.get("n_tx", 0)
 
-    txrefs = data.get("txrefs", []) or []
+    txs = data.get("txs", [])
 
-    # -------- MAX SINGLE TRANSACTION --------
+    # MAX SINGLE TRANSACTION
     max_single_tx = 0
-    for tx in txrefs:
-        value_btc = tx.get("value", 0) / 1e8
-        if value_btc > max_single_tx:
-            max_single_tx = value_btc
+    for tx in txs:
+        for out in tx.get("out", []):
+            val = out.get("value", 0) / 1e8
+            if val > max_single_tx:
+                max_single_tx = val
 
-    # -------- MARKET LOGIC --------
-    if balance == 0 and total_tx > 100:
-        market = "DUMP"
-    elif balance > 10 and total_tx < 50:
-        market = "HOLD"
-    else:
-        market = "NORMAL"
-
-    # -------- SCAM LOGIC --------
-    if balance == 0 and total_tx > 500:
-        scam = "POSSIBLE SCAM"
-        reason = "High transaction activity with zero balance"
-    elif max_single_tx > 50 and balance == 0:
-        scam = "HIGH RISK"
-        reason = "Large fund movement with no retained balance"
-    else:
-        scam = "LOW RISK"
-        reason = "Normal transaction behavior"
-
-    # -------- 🐳 WHALE DETECTION (REAL LOGIC) --------
+    # 🐳 WHALE LOGIC (REAL WORLD)
     whale = "NO"
-
     if total_received >= 100:
         whale = "YES"
     elif max_single_tx >= 10:
@@ -87,7 +61,22 @@ def check_address(data: Address):
     elif total_tx >= 500 and total_received >= 50:
         whale = "YES"
 
-    # -------- FINAL RESPONSE --------
+    # MARKET LOGIC
+    if balance == 0 and total_tx > 100:
+        market = "DUMP"
+    elif balance > 10:
+        market = "HOLD"
+    else:
+        market = "NORMAL"
+
+    # SCAM LOGIC
+    if balance == 0 and total_tx > 500:
+        scam = "POSSIBLE SCAM"
+        reason = "High transaction activity with zero balance"
+    else:
+        scam = "LOW RISK"
+        reason = "Normal transaction behavior"
+
     return {
         "valid": True,
         "balance": round(balance, 8),

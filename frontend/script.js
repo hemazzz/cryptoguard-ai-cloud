@@ -1,37 +1,35 @@
-async function verify() {
-    const addr = document.getElementById("address").value;
-    const out = document.getElementById("result");
+function checkAddress() {
+  const address = document.getElementById("address").value.trim();
 
-    if (addr.trim() === "") {
-        out.innerText = "Please enter an address";
-        return;
+  fetch("https://cryptoguard-ai-cloud.onrender.com/check-address", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      address: address   // 🔴 MUST MATCH backend
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (!data.valid) {
+      document.getElementById("result").innerHTML = "Invalid Address";
+      return;
     }
 
-    try {
-        const res = await fetch("https://cryptoguard-ai-cloud.onrender.com/check-address", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ address: addr })
-        });
+    document.getElementById("result").innerHTML = `
+      <b>Bitcoin Address ✅</b><br><br>
+      Balance: ${data.balance} BTC<br>
+      Total Transactions: ${data.total_tx}<br><br>
 
-        const data = await res.json();
+      Market Behavior: ${data.market}<br>
+      Scam Status: ${data.scam}<br>
+      Whale Activity: ${data.whale}<br><br>
 
-        out.innerText =
-`Bitcoin Address ✅
-
-Balance: ${data.balance} satoshi
-Total Transactions: ${data.total_tx}
-
-Market Behavior: ${data.market}
-Scam Status: ${data.scam}
-Whale Activity: ${data.whale}
-
-Reason:
-${data.reason}`;
-
-    } catch (e) {
-        out.innerText = "Backend not reachable";
-    }
+      Reason: ${data.reason}
+    `;
+  })
+  .catch(err => {
+    document.getElementById("result").innerHTML = "Error connecting to backend";
+  });
 }
