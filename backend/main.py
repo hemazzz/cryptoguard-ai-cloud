@@ -15,76 +15,73 @@ app.add_middleware(
 
 class Address(BaseModel):
     address: str
+    chain: str   # BTC or ETH
 
-@app.get("/")
-def home():
-    return {"msg": "CryptoGuard AI Backend Running"}
 
-@app.post("/check-address")
-def check_address(payload: Address):
+# ---------------- BTC (mempool.space – NO API) ----------------
+def get_btc_data(address):
+    url = f"https://mempool.space/api/address/{address}"
+    r = requests.get(url, timeout=10)
 
-    address = payload.address.strip()
+    if r.status_code != 200:
+        return {"error": "Invalid BTC address"}
 
-    # 🔥 BLOCKCHAIN.INFO API (NO CACHE)
-    url = f"https://blockchain.info/rawaddr/{address}?limit=0"
+    data = r.json()
 
-    try:
-        res = requests.get(url, timeout=10)
-        if res.status_code != 200:
-            return {"valid": False, "error": "Invalid address"}
+    balance = (
+        data["chain_stats"]["funded_txo_sum"]
+        - data["chain_stats"]["spent_txo_sum"]
+    ) / 1e8
 
-        data = res.json()
-    except Exception as e:
-        return {"valid": False, "error": str(e)}
+    tx_count = data["chain_stats"]["tx_count"]
 
-    # BASIC DATA
-    balance = data.get("final_balance", 0) / 1e8
-    total_received = data.get("total_received", 0) / 1e8
-    total_tx = data.get("n_tx", 0)
-
-    txs = data.get("txs", [])
-
-    # MAX SINGLE TRANSACTION
-    max_single_tx = 0
-    for tx in txs:
-        for out in tx.get("out", []):
-            val = out.get("value", 0) / 1e8
-            if val > max_single_tx:
-                max_single_tx = val
-
-    # 🐳 WHALE LOGIC (REAL WORLD)
-    whale = "NO"
-    if total_received >= 100:
-        whale = "YES"
-    elif max_single_tx >= 10:
-        whale = "YES"
-    elif total_tx >= 500 and total_received >= 50:
-        whale = "YES"
-
-    # MARKET LOGIC
-    if balance == 0 and total_tx > 100:
-        market = "DUMP"
-    elif balance > 10:
-        market = "HOLD"
-    else:
-        market = "NORMAL"
-
-    # SCAM LOGIC
-    if balance == 0 and total_tx > 500:
-        scam = "POSSIBLE SCAM"
-        reason = "High transaction activity with zero balance"
-    else:
-        scam = "LOW RISK"
-        reason = "Normal transaction behavior"
+    whale = "🐋 Whale detected" if balance >= 100 else "No whale activity"
 
     return {
-        "valid": True,
-        "balance": round(balance, 8),
-        "total_tx": total_tx,
-        "total_received": round(total_received, 8),
-        "largest_tx": round(max_single_tx, 8),
-        "market": market,
-        "scam": scam,
-        "whale": whale,
-        "reason": reason
+        "chain": "BTC",
+        "balance": balance,
+        "transactions": tx_count,
+        "result": whale
     }
+
+
+# ---------------- ETH (Public RPC – NO API) ----------------
+def get_eth_data(address):
+    rpc_url = "https://rpc.ankr.com/eth"
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "eth_getBalance",
+        "params": [address, "latest"],
+        "id": 1
+    }
+
+    r = requests.post(rpc_url, json=payload, timeout=10).json()
+
+    if "result" not in r:
+        return {"error": "Invalid ETH address"}
+
+    balance_wei = int(r["result"], 16)
+    balance_eth = balance_wei / 1e18
+
+    whale = "🐋 Whale detected" if balance_eth >= 1000 else "No whale activity"
+
+    return {
+        "chain": "ETH",
+        "balance": balance_eth,
+        "result": whale
+    }
+
+
+# ---------------- MAIN API ----------------
+@app.post("/verify")
+def verify_address(data: Address):
+
+    if data.chain.upper() == "BTC":
+        return get_btc_data(data.address)
+
+    elif data.chain.upper() == "ETH":
+        return get_eth_data(data.address)
+
+    else:
+        return {"error": "Unsupported chain"}
