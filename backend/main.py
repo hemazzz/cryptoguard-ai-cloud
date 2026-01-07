@@ -23,6 +23,7 @@ def verify_address(data: dict):
     address = data.get("address")
     chain = data.get("chain")
 
+    # ---------------- BTC ----------------
     if chain == "BTC":
         if not is_valid_btc(address):
             return {
@@ -47,6 +48,7 @@ def verify_address(data: dict):
             "result": whale
         }
 
+    # ---------------- ETH (FIXED – NO BLOCKCYPHER) ----------------
     elif chain == "ETH":
         if not is_valid_eth(address):
             return {
@@ -56,18 +58,28 @@ def verify_address(data: dict):
                 "result": "Invalid ETH address"
             }
 
-        url = f"https://api.blockcypher.com/v1/eth/main/addrs/{address}/balance"
-        r = requests.get(url).json()
+        # Public Ethereum RPC (NO API KEY, STABLE)
+        rpc_url = "https://rpc.ankr.com/eth"
 
-        balance = r.get("balance", 0) / 1e18
-        txs = r.get("n_tx", 0)
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "eth_getBalance",
+            "params": [address, "latest"],
+            "id": 1
+        }
 
-        whale = "Whale activity detected" if balance >= 1000 else "No whale activity"
+        res = requests.post(rpc_url, json=payload).json()
+
+        # Convert hex wei → ETH
+        balance_wei = int(res["result"], 16)
+        balance_eth = balance_wei / 10**18
+
+        whale = "Whale activity detected" if balance_eth >= 1000 else "No whale activity"
 
         return {
             "chain": "ETH",
-            "balance": balance,
-            "transactions": txs,
+            "balance": balance_eth,
+            "transactions": "N/A",
             "result": whale
         }
 
