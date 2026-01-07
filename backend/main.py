@@ -5,6 +5,7 @@ import re
 
 app = FastAPI()
 
+# ---------------- CORS ----------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -12,12 +13,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def is_valid_btc(address):
-    return len(address) >= 26
+# ---------------- VALIDATORS ----------------
+def is_valid_btc(address: str) -> bool:
+    return address is not None and len(address) >= 26
 
-def is_valid_eth(address):
-    return re.fullmatch(r"0x[a-fA-F0-9]{40}", address)
+def is_valid_eth(address: str) -> bool:
+    return re.fullmatch(r"0x[a-fA-F0-9]{40}", address) is not None
 
+# ---------------- MAIN API ----------------
 @app.post("/verify")
 def verify_address(data: dict):
     address = data.get("address")
@@ -46,19 +49,19 @@ def verify_address(data: dict):
                 "result": "BTC API not reachable"
             }
 
-        balance = r.get("balance", 0) / 1e8
+        balance_btc = r.get("balance", 0) / 1e8
         txs = r.get("n_tx", 0)
 
-        whale = "Whale activity detected" if balance >= 100 else "No whale activity"
+        whale = "Whale activity detected" if balance_btc >= 100 else "No whale activity"
 
         return {
             "chain": "BTC",
-            "balance": balance,
+            "balance": round(balance_btc, 8),
             "transactions": txs,
             "result": whale
         }
 
-    # ---------------- ETH (FINAL SAFE VERSION) ----------------
+    # ---------------- ETH (CLOUDFLARE RPC) ----------------
     elif chain == "ETH":
         if not is_valid_eth(address):
             return {
@@ -77,7 +80,7 @@ def verify_address(data: dict):
 
         try:
             res = requests.post(
-                "https://rpc.ankr.com/eth",
+                "https://cloudflare-eth.com",
                 json=payload,
                 timeout=10
             ).json()
@@ -89,8 +92,7 @@ def verify_address(data: dict):
                 "result": "ETH RPC not reachable"
             }
 
-        # 🔥 MAIN FIX
-        if not isinstance(res, dict) or "result" not in res:
+        if "result" not in res:
             return {
                 "chain": "ETH",
                 "balance": "N/A",
@@ -113,9 +115,15 @@ def verify_address(data: dict):
 
         return {
             "chain": "ETH",
-            "balance": balance_eth,
+            "balance": round(balance_eth, 6),
             "transactions": "N/A",
             "result": whale
         }
 
-    return {"error": "Unsupported chain"}
+    # ---------------- UNSUPPORTED ----------------
+    return {
+        "chain": chain,
+        "balance": "N/A",
+        "transactions": "N/A",
+        "result": "Unsupported chain"
+    }
