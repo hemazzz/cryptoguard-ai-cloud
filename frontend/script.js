@@ -8,8 +8,11 @@ function isValidETH(address) {
 
 document.getElementById("verifyBtn").addEventListener("click", async () => {
   const address = document.getElementById("address").value.trim();
-  const chain = document.getElementById("chain").value;
+  const chainRaw = document.getElementById("chain").value;
   const resultBox = document.getElementById("result");
+
+  // normalize chain value
+  const chain = chainRaw.toUpperCase().includes("ETH") ? "ETH" : "BTC";
 
   if (!address) {
     resultBox.innerText = "Please enter an address";
