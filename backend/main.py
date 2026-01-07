@@ -1,11 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import requests
+import re
 
 app = FastAPI()
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,75 +12,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class Address(BaseModel):
-    address: str
-    chain: str   # BTC or ETH
+def is_valid_btc(address):
+    return len(address) >= 26
 
+def is_valid_eth(address):
+    return re.fullmatch(r"0x[a-fA-F0-9]{40}", address)
 
-# ---------------- BTC (mempool.space – NO API) ----------------
-def get_btc_data(address):
-    url = f"https://mempool.space/api/address/{address}"
-    r = requests.get(url, timeout=10)
-
-    if r.status_code != 200:
-        return {"error": "Invalid BTC address"}
-
-    data = r.json()
-
-    balance = (
-        data["chain_stats"]["funded_txo_sum"]
-        - data["chain_stats"]["spent_txo_sum"]
-    ) / 1e8
-
-    tx_count = data["chain_stats"]["tx_count"]
-
-    whale = "🐋 Whale detected" if balance >= 100 else "No whale activity"
-
-    return {
-        "chain": "BTC",
-        "balance": balance,
-        "transactions": tx_count,
-        "result": whale
-    }
-
-
-# ---------------- ETH (Public RPC – NO API) ----------------
-def get_eth_data(address):
-    rpc_url = "https://rpc.ankr.com/eth"
-
-    payload = {
-        "jsonrpc": "2.0",
-        "method": "eth_getBalance",
-        "params": [address, "latest"],
-        "id": 1
-    }
-
-    r = requests.post(rpc_url, json=payload, timeout=10).json()
-
-    if "result" not in r:
-        return {"error": "Invalid ETH address"}
-
-    balance_wei = int(r["result"], 16)
-    balance_eth = balance_wei / 1e18
-
-    whale = "🐋 Whale detected" if balance_eth >= 1000 else "No whale activity"
-
-    return {
-        "chain": "ETH",
-        "balance": balance_eth,
-        "result": whale
-    }
-
-
-# ---------------- MAIN API ----------------
 @app.post("/verify")
-def verify_address(data: Address):
+def verify_address(data: dict):
+    address = data.get("address")
+    chain = data.get("chain")
 
-    if data.chain.upper() == "BTC":
-        return get_btc_data(data.address)
+    if chain == "BTC":
+        if not is_valid_btc(address):
+            return {
+                "chain": "BTC",
+                "balance": "N/A",
+                "transactions": "N/A",
+                "result": "Invalid BTC address"
+            }
 
-    elif data.chain.upper() == "ETH":
-        return get_eth_data(data.address)
+        url = f"https://api.blockcypher.com/v1/btc/main/addrs/{address}"
+        r = requests.get(url).json()
 
-    else:
-        return {"error": "Unsupported chain"}
+        balance = r.get("balance", 0) / 1e8
+        txs = r.get("n_tx", 0)
+
+        whale = "Whale activity detected" if balance >= 100 else "No whale activity"
+
+        return {
+            "chain": "BTC",
+            "balance": balance,
+            "transactions": txs,
+            "result": whale
+        }
+
+    elif chain == "ETH":
+        if not is_valid_eth(address):
+            return {
+                "chain": "ETH",
+                "balance": "N/A",
+                "transactions": "N/A",
+                "result": "Invalid ETH address"
+            }
+
+        url = f"https://api.blockcypher.com/v1/eth/main/addrs/{address}/balance"
+        r = requests.get(url).json()
+
+        balance = r.get("balance", 0) / 1e18
+        txs = r.get("n_tx", 0)
+
+        whale = "Whale activity detected" if balance >= 1000 else "No whale activity"
+
+        return {
+            "chain": "ETH",
+            "balance": balance,
+            "transactions": txs,
+            "result": whale
+        }
+
+    return {"error": "Unsupported chain"}

@@ -1,67 +1,54 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const addressInput = document.getElementById("address");
-  const chainSelect = document.getElementById("chain");
-  const verifyBtn = document.getElementById("verifyBtn");
+const API_URL = "https://cryptoguard-ai-cloud-1.onrender.com/verify";
+
+async function verifyAddress() {
+  const address = document.getElementById("address").value.trim();
+  const chain = document.getElementById("chain").value;
   const resultBox = document.getElementById("result");
 
-  verifyBtn.addEventListener("click", async () => {
-    const address = addressInput.value.trim();
-    const chain = chainSelect.value; // BTC or ETH
+  resultBox.style.color = "#00ff9c";
+  resultBox.innerText = "Checking address...";
 
-    if (!address) {
-      resultBox.style.color = "red";
-      resultBox.innerText = "Please enter an address";
-      return;
-    }
+  if (!address) {
+    resultBox.style.color = "red";
+    resultBox.innerText = "Address required";
+    return;
+  }
 
-    resultBox.style.color = "#00e0ff";
-    resultBox.innerText = "Checking blockchain data...";
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address: address,
+        chain: chain
+      })
+    });
 
-    try {
-      const response = await fetch(
-        "https://cryptoguard-ai-cloud-1.onrender.com/verify",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            address: address,
-            chain: chain
-          })
-        }
-      );
+    const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error("Server error");
-      }
+    // 🔥 SAFE FIELD MAPPING (BTC + ETH)
+    const balance =
+      data.balance !== undefined ? data.balance : "N/A";
 
-      const data = await response.json();
+    const transactions =
+      data.transactions ??
+      data.tx_count ??
+      data.n_tx ??
+      "N/A";
 
-      // 🔥 GUARANTEED SAFE VALUES (no undefined)
-      const txCount =
-        data.transactions !== undefined ? data.transactions : "N/A";
+    const status =
+      data.result ?? data.status ?? "N/A";
 
-      const balance =
-        data.balance !== undefined ? data.balance : "N/A";
+    resultBox.style.color = "#00ff9c";
+    resultBox.innerText =
+      "Chain: " + data.chain + "\n" +
+      "Balance: " + balance + "\n" +
+      "Transactions: " + transactions + "\n" +
+      "Status: " + status;
 
-      const result =
-        data.result !== undefined ? data.result : "N/A";
-
-      const chainName =
-        data.chain !== undefined ? data.chain : chain;
-
-      resultBox.style.color = "#00ff9c";
-      resultBox.innerText =
-        "Chain: " + chainName + "\n" +
-        "Balance: " + balance + "\n" +
-        "Transactions: " + txCount + "\n" +
-        "Status: " + result;
-
-    } catch (error) {
-      console.error(error);
-      resultBox.style.color = "red";
-      resultBox.innerText = "Error connecting to backend";
-    }
-  });
-});
+  } catch (err) {
+    resultBox.style.color = "red";
+    resultBox.innerText = "Backend error / API down";
+    console.error(err);
+  }
+}
