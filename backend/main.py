@@ -23,7 +23,7 @@ def verify_address(data: dict):
     address = data.get("address")
     chain = data.get("chain")
 
-    # ---------- BTC ----------
+    # ---------------- BTC ----------------
     if chain == "BTC":
         if not is_valid_btc(address):
             return {
@@ -33,8 +33,18 @@ def verify_address(data: dict):
                 "result": "Invalid BTC address"
             }
 
-        url = f"https://api.blockcypher.com/v1/btc/main/addrs/{address}"
-        r = requests.get(url, timeout=10).json()
+        try:
+            r = requests.get(
+                f"https://api.blockcypher.com/v1/btc/main/addrs/{address}",
+                timeout=10
+            ).json()
+        except Exception:
+            return {
+                "chain": "BTC",
+                "balance": "N/A",
+                "transactions": "N/A",
+                "result": "BTC API not reachable"
+            }
 
         balance = r.get("balance", 0) / 1e8
         txs = r.get("n_tx", 0)
@@ -48,7 +58,7 @@ def verify_address(data: dict):
             "result": whale
         }
 
-    # ---------- ETH (SAFE & FIXED) ----------
+    # ---------------- ETH (FINAL SAFE VERSION) ----------------
     elif chain == "ETH":
         if not is_valid_eth(address):
             return {
@@ -58,8 +68,6 @@ def verify_address(data: dict):
                 "result": "Invalid ETH address"
             }
 
-        rpc_url = "https://rpc.ankr.com/eth"
-
         payload = {
             "jsonrpc": "2.0",
             "method": "eth_getBalance",
@@ -68,7 +76,11 @@ def verify_address(data: dict):
         }
 
         try:
-            res = requests.post(rpc_url, json=payload, timeout=10).json()
+            res = requests.post(
+                "https://rpc.ankr.com/eth",
+                json=payload,
+                timeout=10
+            ).json()
         except Exception:
             return {
                 "chain": "ETH",
@@ -77,8 +89,8 @@ def verify_address(data: dict):
                 "result": "ETH RPC not reachable"
             }
 
-        # 🔥 KEY FIX: result check
-        if "result" not in res:
+        # 🔥 MAIN FIX
+        if not isinstance(res, dict) or "result" not in res:
             return {
                 "chain": "ETH",
                 "balance": "N/A",
@@ -86,8 +98,16 @@ def verify_address(data: dict):
                 "result": "ETH data temporarily unavailable"
             }
 
-        balance_wei = int(res["result"], 16)
-        balance_eth = balance_wei / 10**18
+        try:
+            balance_wei = int(res["result"], 16)
+            balance_eth = balance_wei / 10**18
+        except Exception:
+            return {
+                "chain": "ETH",
+                "balance": "N/A",
+                "transactions": "N/A",
+                "result": "ETH balance parse error"
+            }
 
         whale = "Whale activity detected" if balance_eth >= 1000 else "No whale activity"
 
@@ -99,4 +119,3 @@ def verify_address(data: dict):
         }
 
     return {"error": "Unsupported chain"}
-
