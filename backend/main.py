@@ -23,7 +23,7 @@ def verify_address(data: dict):
     address = data.get("address")
     chain = data.get("chain")
 
-    # ---------------- BTC ----------------
+    # ---------- BTC ----------
     if chain == "BTC":
         if not is_valid_btc(address):
             return {
@@ -34,7 +34,7 @@ def verify_address(data: dict):
             }
 
         url = f"https://api.blockcypher.com/v1/btc/main/addrs/{address}"
-        r = requests.get(url).json()
+        r = requests.get(url, timeout=10).json()
 
         balance = r.get("balance", 0) / 1e8
         txs = r.get("n_tx", 0)
@@ -48,7 +48,7 @@ def verify_address(data: dict):
             "result": whale
         }
 
-    # ---------------- ETH (FIXED – NO BLOCKCYPHER) ----------------
+    # ---------- ETH (SAFE & FIXED) ----------
     elif chain == "ETH":
         if not is_valid_eth(address):
             return {
@@ -58,7 +58,6 @@ def verify_address(data: dict):
                 "result": "Invalid ETH address"
             }
 
-        # Public Ethereum RPC (NO API KEY, STABLE)
         rpc_url = "https://rpc.ankr.com/eth"
 
         payload = {
@@ -68,9 +67,25 @@ def verify_address(data: dict):
             "id": 1
         }
 
-        res = requests.post(rpc_url, json=payload).json()
+        try:
+            res = requests.post(rpc_url, json=payload, timeout=10).json()
+        except Exception:
+            return {
+                "chain": "ETH",
+                "balance": "N/A",
+                "transactions": "N/A",
+                "result": "ETH RPC not reachable"
+            }
 
-        # Convert hex wei → ETH
+        # 🔥 KEY FIX: result check
+        if "result" not in res:
+            return {
+                "chain": "ETH",
+                "balance": "N/A",
+                "transactions": "N/A",
+                "result": "ETH data temporarily unavailable"
+            }
+
         balance_wei = int(res["result"], 16)
         balance_eth = balance_wei / 10**18
 
@@ -84,3 +99,4 @@ def verify_address(data: dict):
         }
 
     return {"error": "Unsupported chain"}
+
